@@ -1,0 +1,26 @@
+# Gradle and Kotlin build outputs
+.gradle/
+build/
+out/
+
+# Packaged desktop artifacts
+*.dmg
+*.jar
+
+# IDE/editor files
+.idea/
+*.iml
+.vscode/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
