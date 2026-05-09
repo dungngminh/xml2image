@@ -89,7 +89,7 @@ build/jpackage/output/
 - Input must be Android `<vector>` drawable XML.
 - PNG keeps transparency when `Keep alpha` is enabled.
 - JPG is written on a white background.
-- WebP uses Java ImageIO if available, otherwise it calls `cwebp` from `PATH`.
+- Gradle-built packages include a WebP ImageIO writer. Direct `kotlinc` fallback builds still use `cwebp` from `PATH` for WebP export.
 
 ## Contributing
 

@@ -684,7 +684,7 @@ private class PathParser(private val data: String) {
     }
 }
 
-private object ImageExporter {
+internal object ImageExporter {
     fun write(image: BufferedImage, file: File, format: String, alpha: Boolean) {
         when (format) {
             "jpg", "jpeg" -> writeJpeg(image, file)
@@ -705,25 +705,33 @@ private object ImageExporter {
 
     private fun writeWebp(image: BufferedImage, file: File, alpha: Boolean) {
         val writers = ImageIO.getImageWritersByFormatName("webp")
-        if (writers.hasNext()) {
+        var pluginFailure: Throwable? = null
+        while (writers.hasNext()) {
             val writer: ImageWriter = writers.next()
-            ImageIO.createImageOutputStream(file).use { out ->
-                writer.output = out
-                writer.write(null, IIOImage(image, null, null), writer.defaultWriteParam.apply {
-                    if (canWriteCompressed()) {
-                        compressionMode = ImageWriteParam.MODE_EXPLICIT
-                        compressionQuality = 0.9f
-                    }
-                })
+            try {
+                ImageIO.createImageOutputStream(file).use { out ->
+                    writer.output = out
+                    writer.write(null, IIOImage(image, null, null), writer.defaultWriteParam.apply {
+                        if (canWriteCompressed()) {
+                            compressionMode = ImageWriteParam.MODE_EXPLICIT
+                            compressionQuality = 0.9f
+                        }
+                    })
+                }
+                return
+            } catch (error: Throwable) {
+                pluginFailure = error
+            } finally {
+                writer.dispose()
             }
-            writer.dispose()
-            return
         }
 
-        val cwebp = findExecutable("cwebp") ?: error("WebP needs cwebp installed or an ImageIO WebP writer")
+        val cwebp = findExecutable("cwebp")
+            ?: error(pluginFailure?.let { "WebP ImageIO writer failed and cwebp was not found: ${it.message}" }
+                ?: "WebP needs cwebp installed or an ImageIO WebP writer")
         val temp = Files.createTempFile("xml2image-", ".png").toFile()
         try {
-            ImageIO.write(image, "png", temp)
+            check(ImageIO.write(image, "png", temp)) { "Could not create temporary PNG for WebP export" }
             val command = buildList {
                 add(cwebp.absolutePath)
                 if (alpha) add("-lossless") else addAll(listOf("-q", "90"))

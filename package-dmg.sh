@@ -35,6 +35,7 @@ if ! command -v jlink >/dev/null 2>&1; then
 fi
 
 if kotlinc_bin="$(find_kotlinc)"; then
+  app_version="0.1.1"
   rm -rf build/jpackage/runtime
   mkdir -p build/jpackage/input build/jpackage/output
   "$kotlinc_bin" src/main/kotlin/com/komkat/xml2image/XmlResourceConverterGui.kt -include-runtime -d build/jpackage/input/xml2image.jar
@@ -48,7 +49,7 @@ if kotlinc_bin="$(find_kotlinc)"; then
   exec jpackage \
     --type dmg \
     --name "XML Resource Converter" \
-    --app-version "1.0.0" \
+    --app-version "$app_version" \
     --vendor "Komkat" \
     --input build/jpackage/input \
     --main-jar xml2image.jar \
