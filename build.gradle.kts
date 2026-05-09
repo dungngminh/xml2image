@@ -1,3 +1,8 @@
+import java.awt.RenderingHints
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
+
 plugins {
     kotlin("jvm") version "2.2.21"
     application
@@ -18,8 +23,11 @@ val packageInputDir = layout.buildDirectory.dir("jpackage/input")
 val packageOutputDir = layout.buildDirectory.dir("jpackage/output")
 val packageRuntimeDir = layout.buildDirectory.dir("jpackage/runtime")
 val litePackageRoot = layout.buildDirectory.dir("lite-package/xml2image")
+val windowsPackageRoot = layout.buildDirectory.dir("lite-package/windows")
 val liteDistributionDir = layout.buildDirectory.dir("distributions")
 val macIconFile = layout.projectDirectory.file("src/main/resources/macos/AppIcon.icns")
+val appIconPng = layout.projectDirectory.file("assets/logo.png")
+val generatedWindowsIcon = layout.buildDirectory.file("generated-icons/xml2image.ico")
 
 tasks.jar {
     archiveBaseName.set("xml2image")
@@ -95,13 +103,23 @@ tasks.register<Exec>("packageDmg") {
 val prepareLitePackage by tasks.registering(Sync::class) {
     group = "distribution"
     description = "Prepare a lightweight cross-platform app folder that requires Java 21+."
-    dependsOn(tasks.jar)
+    dependsOn(tasks.jar, "generateWindowsIcon")
 
     into(litePackageRoot)
 
     from(tasks.jar.flatMap { it.archiveFile }) {
         into("lib")
         rename { "xml2image.jar" }
+    }
+
+    from(appIconPng) {
+        into("share/icons")
+        rename { "xml2image.png" }
+    }
+
+    from(generatedWindowsIcon) {
+        into("share/icons")
+        rename { "xml2image.ico" }
     }
 
     doLast {
@@ -129,6 +147,19 @@ val prepareLitePackage by tasks.registering(Sync::class) {
             """.trimIndent().replace("\n", "\r\n") + "\r\n",
         )
 
+        root.resolve("xml2image.desktop").writeText(
+            """
+            [Desktop Entry]
+            Type=Application
+            Name=XML2Image
+            Comment=Convert Android VectorDrawable XML files to PNG, JPG, or WebP
+            Exec=bin/xml2image
+            Icon=share/icons/xml2image.png
+            Terminal=false
+            Categories=Graphics;Utility;
+            """.trimIndent() + "\n",
+        )
+
         root.resolve("README.txt").writeText(
             """
             XML2Image
@@ -139,19 +170,107 @@ val prepareLitePackage by tasks.registering(Sync::class) {
             Run:
             - Linux/macOS: bin/xml2image
             - Windows: bin\xml2image.bat
+
+            Icons:
+            - Linux: share/icons/xml2image.png and xml2image.desktop
+            - Windows: share\icons\xml2image.ico
             """.trimIndent() + "\n",
         )
     }
 }
 
+
+tasks.register("generateWindowsIcon") {
+    group = "distribution"
+    description = "Generate a Windows ICO from assets/logo.png for lightweight packages."
+    inputs.file(appIconPng)
+    outputs.file(generatedWindowsIcon)
+
+    doLast {
+        val input = appIconPng.asFile
+        val output = generatedWindowsIcon.get().asFile
+        output.parentFile.mkdirs()
+
+        val image = javax.imageio.ImageIO.read(input)
+        val resized = BufferedImage(256, 256, BufferedImage.TYPE_INT_ARGB)
+        val graphics = resized.createGraphics()
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+        graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        graphics.drawImage(image, 0, 0, 256, 256, null)
+        graphics.dispose()
+
+        val pngBytes = ByteArrayOutputStream().use { stream ->
+            javax.imageio.ImageIO.write(resized, "png", stream)
+            stream.toByteArray()
+        }
+
+        DataOutputStream(output.outputStream().buffered()).use { out ->
+            fun writeWord(value: Int) {
+                out.writeByte(value and 0xff)
+                out.writeByte((value ushr 8) and 0xff)
+            }
+
+            fun writeDword(value: Int) {
+                out.writeByte(value and 0xff)
+                out.writeByte((value ushr 8) and 0xff)
+                out.writeByte((value ushr 16) and 0xff)
+                out.writeByte((value ushr 24) and 0xff)
+            }
+
+            writeWord(0)
+            writeWord(1)
+            writeWord(1)
+            out.writeByte(0)
+            out.writeByte(0)
+            out.writeByte(0)
+            out.writeByte(0)
+            writeWord(1)
+            writeWord(32)
+            writeDword(pngBytes.size)
+            writeDword(22)
+            out.write(pngBytes)
+        }
+    }
+}
+
+tasks.register<Exec>("prepareWindowsAppImage") {
+    group = "distribution"
+    description = "Build a Windows app image with an .exe launcher and no bundled runtime."
+    dependsOn(tasks.jar, "generateWindowsIcon")
+    onlyIf {
+        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+        if (!isWindows) logger.warn("Windows app image packaging is only available on Windows.")
+        isWindows
+    }
+
+    doFirst {
+        delete(windowsPackageRoot)
+        windowsPackageRoot.get().asFile.mkdirs()
+    }
+
+    commandLine(
+        "jpackage",
+        "--type", "app-image",
+        "--name", "XML2Image",
+        "--app-version", project.version.toString(),
+        "--vendor", "Komkat",
+        "--input", tasks.jar.get().archiveFile.get().asFile.parentFile.absolutePath,
+        "--main-jar", tasks.jar.get().archiveFileName.get(),
+        "--main-class", application.mainClass.get(),
+        "--icon", generatedWindowsIcon.get().asFile.absolutePath,
+        "--dest", windowsPackageRoot.get().asFile.absolutePath,
+    )
+}
+
 tasks.register<org.gradle.api.tasks.bundling.Zip>("packageLiteZip") {
     group = "distribution"
-    description = "Build a lightweight ZIP distribution for Windows and other platforms."
-    dependsOn(prepareLitePackage)
-    archiveFileName.set("xml2image-lite-${project.version}.zip")
+    description = "Build a lightweight ZIP distribution for Windows with an .exe launcher."
+    dependsOn("prepareWindowsAppImage")
+    archiveFileName.set("xml2image-windows-lite-${project.version}.zip")
     destinationDirectory.set(liteDistributionDir)
-    from(litePackageRoot.map { it.asFile.parentFile }) {
-        include("xml2image/**")
+    from(windowsPackageRoot) {
+        include("XML2Image/**")
     }
 }
 
