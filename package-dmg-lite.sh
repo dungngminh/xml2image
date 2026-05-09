@@ -22,6 +22,7 @@ if ! command -v hdiutil >/dev/null 2>&1; then
 fi
 
 app_name="XML Resource Converter"
+app_version="0.1.1"
 bundle_id="com.komkat.xml2image"
 build_dir="build/lite-dmg"
 app_dir="$build_dir/$app_name.app"
@@ -30,7 +31,7 @@ macos_dir="$contents_dir/MacOS"
 resources_dir="$contents_dir/Resources"
 output_dir="build/jpackage/output"
 jar_name="xml2image.jar"
-dmg_path="$output_dir/$app_name-lite-1.0.0.dmg"
+dmg_path="$output_dir/$app_name-lite-$app_version.dmg"
 
 rm -rf "$build_dir"
 mkdir -p "$macos_dir" "$resources_dir" "$output_dir"
@@ -72,7 +73,7 @@ cat > "$contents_dir/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0.0</string>
+  <string>$app_version</string>
   <key>CFBundleVersion</key>
   <string>1</string>
   <key>LSMinimumSystemVersion</key>

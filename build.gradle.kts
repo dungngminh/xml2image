@@ -8,8 +8,18 @@ plugins {
     application
 }
 
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("com.github.usefulness:webp-imageio:0.10.2")
+    testImplementation(kotlin("test-junit5"))
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
 group = "com.komkat"
-version = "0.1.0"
+version = "0.1.1"
 
 kotlin {
     jvmToolchain(21)
@@ -40,6 +50,10 @@ tasks.jar {
             .filter { it.name.endsWith(".jar") }
             .map { zipTree(it) }
     })
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 val prepareJpackage by tasks.registering(Copy::class) {

@@ -12,6 +12,7 @@ The application is intentionally small:
 - macOS app icon resource lives at `src/main/resources/macos/AppIcon.icns`.
 - `assets/logo.png` is the source image used to generate the macOS icon.
 - Packaging scripts live at `package-dmg.sh` and `package-dmg-lite.sh`.
+  Prefer lite packages unless the user explicitly needs a bundled Java runtime.
 
 Core responsibilities in the Kotlin file:
 
@@ -29,6 +30,8 @@ Core responsibilities in the Kotlin file:
   in, so do not assume `./gradlew` exists.
 - Kotlin compiler (`kotlinc`) as a fallback for the shell scripts.
 - Optional: `cwebp` for WebP export when no WebP ImageIO writer is installed.
+  Gradle-built packages include a WebP ImageIO writer; direct `kotlinc`
+  fallback builds still need `cwebp` for WebP export.
 - macOS-only tools for DMG packaging: `jpackage`, `jlink`, and `hdiutil`
   depending on the packaging mode.
 
@@ -60,19 +63,21 @@ application main class `com.komkat.xml2image.XmlResourceConverterGuiKt`.
 The JAR is self-contained with runtime dependencies so lightweight packages can
 run with only Java 21+ installed.
 
+## Versioning
+
+The project version lives in `build.gradle.kts`. Shell packaging fallbacks also
+carry the app version in `package-dmg.sh` and `package-dmg-lite.sh`; keep these
+values in sync when bumping a release.
+
+Use semantic versioning. For bug fixes, bump the patch version. For packaged
+behavior changes, also add an entry to `CHANGELOG.md` using Keep a Changelog
+sections such as `Added`, `Changed`, and `Fixed`.
+
 ## Packaging
 
-Create a macOS DMG with a bundled stripped Java runtime:
+Prefer lightweight packages that require Java 21+ on the target machine.
 
-```sh
-./package-dmg.sh
-```
-
-This script delegates to Gradle's `packageDmg` task when Gradle is available.
-Otherwise it compiles with `kotlinc`, builds a `jlink` runtime containing
-`java.base` and `java.desktop`, then invokes `jpackage`.
-
-Create a smaller macOS DMG that does not bundle Java:
+Create the preferred smaller macOS DMG that does not bundle Java:
 
 ```sh
 ./package-dmg-lite.sh
@@ -89,6 +94,17 @@ gradle packageLite
 ```
 
 Archives are written under `build/distributions/`.
+
+Create a macOS DMG with a bundled stripped Java runtime only when requested or
+when the target users cannot install Java separately:
+
+```sh
+./package-dmg.sh
+```
+
+This script delegates to Gradle's `packageDmg` task when Gradle is available.
+Otherwise it compiles with `kotlinc`, builds a `jlink` runtime containing
+`java.base` and `java.desktop`, then invokes `jpackage`.
 
 ## Testing Instructions
 
@@ -144,7 +160,8 @@ and DMG outputs.
 - The README mentions Gradle, but this checkout may not include `gradlew`; use
   `gradle` or the fallback scripts unless a wrapper is added.
 - DMG packaging is macOS-specific.
-- WebP may fail at runtime without either an ImageIO WebP writer or `cwebp`.
+- Gradle packages bundle a WebP ImageIO writer. Direct `kotlinc` fallback
+  builds may still fail at runtime without `cwebp`.
 - Android vector colors that reference resources other than
   `@android:color/transparent` are currently ignored by `parseColor`.
 - The renderer supports a practical subset of VectorDrawable behavior; changes
@@ -155,5 +172,8 @@ and DMG outputs.
 - Keep changes scoped to the requested behavior.
 - Update `README.md` and this file when commands, packaging behavior, or project
   structure changes.
+- When changes affect releases or packaged app behavior, bump the version in
+  `build.gradle.kts`, sync shell packaging fallback versions, and update
+  `CHANGELOG.md`.
 - Run the relevant build/run command before handing off work, and note any
   command that could not be run.
